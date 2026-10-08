@@ -39,21 +39,15 @@ function daysBetween(a: Date, b: Date) {
   );
 }
 
-/**
- * Détermine la date de référence d'une tâche pour le groupage.
- * - Si en cours (start <= now <= end) → aujourd'hui
- * - Si pas commencée (start > now) → date de début
- * - Si finie (end < now) → date de fin (pour "En retard")
- */
 function getReferenceDate(t: Task, now: Date): Date | null {
   const start = t.start_at ? new Date(t.start_at) : null;
   const end = t.end_at ? new Date(t.end_at) : null;
 
   if (!start && !end) return null;
   if (start && end) {
-    if (start <= now && now <= end) return now; // en cours → aujourd'hui
-    if (start > now) return start;              // à venir → date de début
-    return end;                                  // passée → date de fin
+    if (start <= now && now <= end) return now;
+    if (start > now) return start;
+    return end;
   }
   return end ?? start;
 }
@@ -150,25 +144,33 @@ export default function TaskListView({ hiddenListIds }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true);
     const now = new Date();
     const from = new Date(now.getFullYear() - 5, 0, 1).toISOString();
     const to   = new Date(now.getFullYear() + 10, 0, 1).toISOString();
     const rows = await api.listRange(from, to);
     setTasks(rows);
-    setLoading(false);
+    if (!silent) setLoading(false);
   };
 
   useEffect(() => {
     load();
     let unlisten: (() => void) | undefined;
-    api.onChanged(load).then((fn) => {
+    api.onChanged(() => load(true)).then((fn) => {
       unlisten = fn;
     });
     return () => {
       unlisten?.();
     };
+  }, []);
+
+  // Polling silencieux toutes les 20s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      load(true);
+    }, 20000);
+    return () => clearInterval(interval);
   }, []);
 
   const visibleTasks = tasks.filter(
@@ -222,7 +224,7 @@ export default function TaskListView({ hiddenListIds }: Props) {
       alert(
         `Import terminé :\n${report.tasks_inserted} tâche(s)\n${report.lists_inserted} liste(s)`
       );
-      await load();
+      await load(true);
     } catch (e) {
       alert('Erreur import : ' + e);
     }

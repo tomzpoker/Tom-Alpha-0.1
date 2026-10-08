@@ -44,7 +44,6 @@ export default function CalendarView({ hiddenListIds }: Props) {
         let start = t.start_at ?? t.end_at ?? undefined;
         let end: string | undefined = undefined;
 
-        // Si on a un vrai start ET un vrai end différents → événement multi-jours
         if (t.start_at && t.end_at) {
           const sd = new Date(t.start_at);
           const ed = new Date(t.end_at);
@@ -55,7 +54,6 @@ export default function CalendarView({ hiddenListIds }: Props) {
 
           if (!sameDay) {
             start = t.start_at;
-            // FullCalendar : end est EXCLUSIF pour les all_day → +1 jour
             if (t.all_day) {
               const plus1 = new Date(ed);
               plus1.setDate(plus1.getDate() + 1);
@@ -89,6 +87,14 @@ export default function CalendarView({ hiddenListIds }: Props) {
     return () => {
       unlisten?.();
     };
+  }, [hiddenListIds]);
+
+  // Polling silencieux toutes les 20s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      load();
+    }, 20000);
+    return () => clearInterval(interval);
   }, [hiddenListIds]);
 
   useEffect(() => {

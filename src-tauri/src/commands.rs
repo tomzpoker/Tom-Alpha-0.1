@@ -36,8 +36,10 @@ pub async fn list_tasks_range(
         SELECT t.*, l.name AS list_name, l.color AS list_color
         FROM tasks t
         LEFT JOIN task_lists l ON l.id = t.list_id
-        WHERE t.start_at < $2 AND COALESCE(t.end_at, t.start_at) >= $1
-        ORDER BY t.start_at
+        WHERE
+            (t.start_at IS NULL AND t.end_at IS NULL)
+            OR (t.start_at < $2 AND COALESCE(t.end_at, t.start_at) >= $1)
+        ORDER BY t.start_at NULLS LAST
         "#,
     )
     .bind(from)
@@ -287,10 +289,6 @@ pub async fn bulk_import_tasks(
     tx.commit().await?;
     Ok(count)
 }
-
-// ============================================================
-// EXPORT / IMPORT
-// ============================================================
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExportBundle {

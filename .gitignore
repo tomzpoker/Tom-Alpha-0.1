@@ -40,3 +40,5 @@ lerna-debug.log*
 # Fichiers d'export de test
 test-export.json
 tasks-export-*.json
+dump_data.sql
+test-export.json

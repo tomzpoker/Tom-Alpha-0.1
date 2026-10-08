@@ -48,6 +48,14 @@ export default function App() {
     };
   }, [loadLists]);
 
+  // Polling silencieux toutes les 20s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadLists();
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [loadLists]);
+
   useEffect(() => {
     const unlisten = win.onFocusChanged(({ payload: focused }) => {
       if (focused) win.setSkipTaskbar(true).catch(() => {});
