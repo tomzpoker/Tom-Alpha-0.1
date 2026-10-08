@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { save, open } from '@tauri-apps/plugin-dialog';
 import { api, type Task, type TaskStatus } from '../lib/api';
 import TaskModal from './TaskModal';
 import TaskLinksModal from './TaskLinksModal';
@@ -40,6 +39,13 @@ function daysBetween(a: Date, b: Date) {
   );
 }
 
+/** "10h00", "10h30" — toujours 2 chiffres pour les minutes */
+function formatTime(d: Date): string {
+  const h = d.getHours().toString().padStart(2, '0');
+  const m = d.getMinutes().toString().padStart(2, '0');
+  return `${h}h${m}`;
+}
+
 function getReferenceDate(t: Task, now: Date): Date | null {
   const start = t.start_at ? new Date(t.start_at) : null;
   const end = t.end_at ? new Date(t.end_at) : null;
@@ -56,13 +62,13 @@ function getReferenceDate(t: Task, now: Date): Date | null {
 function groupTasks(tasks: Task[]): Group[] {
   const now = new Date();
   const groups: Group[] = [
-    { key: 'overdue',  label: '⏰ En retard',         tasks: [] },
-    { key: 'today',    label: "Aujourd'hui",         tasks: [] },
-    { key: 'tomorrow', label: 'Demain',              tasks: [] },
-    { key: 'week',     label: 'Cette semaine',       tasks: [] },
-    { key: 'month',    label: '30 prochains jours',  tasks: [] },
-    { key: 'later',    label: 'Plus tard',           tasks: [] },
-    { key: 'none',     label: 'Sans échéance',       tasks: [] },
+    { key: 'overdue',  label: '⏰ En retard',        tasks: [] },
+    { key: 'today',    label: "Aujourd'hui",        tasks: [] },
+    { key: 'tomorrow', label: 'Demain',             tasks: [] },
+    { key: 'week',     label: 'Cette semaine',      tasks: [] },
+    { key: 'month',    label: '30 prochains jours', tasks: [] },
+    { key: 'later',    label: 'Plus tard',          tasks: [] },
+    { key: 'none',     label: 'Sans échéance',      tasks: [] },
   ];
 
   for (const t of tasks) {
@@ -99,44 +105,57 @@ function formatDate(t: Task): string {
 
   if (!start && !end) return '';
 
+  // ============================================================
+  // Cas multi-jours
+  // ============================================================
   if (start && end) {
     const diffDays = daysBetween(start, end);
     if (diffDays > 0) {
-      const startStr = start.toLocaleDateString('fr-FR', {
+      const startDay = start.toLocaleDateString('fr-FR', {
         day: 'numeric',
         month: 'short',
       });
-      const endStr = end.toLocaleDateString('fr-FR', {
+      const endDay = end.toLocaleDateString('fr-FR', {
         day: 'numeric',
         month: 'short',
       });
-      return `Du ${startStr} au ${endStr}`;
+
+      if (t.all_day) {
+        return `Du ${startDay} au ${endDay}`;
+      }
+      return `Du ${startDay} au ${endDay} → ${formatTime(end)}`;
     }
   }
 
+  // ============================================================
+  // Cas même jour
+  // ============================================================
   const ref = end ?? start;
   if (!ref) return '';
+
   const diff = daysBetween(now, ref);
-  const time = t.all_day
-    ? ''
-    : ` à ${ref.getHours().toString().padStart(2, '0')}h${ref
-        .getMinutes()
-        .toString()
-        .padStart(2, '0')}`;
 
-  if (diff === 0) return `Aujourd'hui${time}`;
-  if (diff === 1) return `Demain${time}`;
-  if (diff === -1) return `Hier${time}`;
-  if (diff < 0) return `Il y a ${Math.abs(diff)} j${time}`;
-  if (diff < 7) return `Dans ${diff} j${time}`;
-
-  return (
-    ref.toLocaleDateString('fr-FR', {
+  let dayLabel: string;
+  if (diff === 0) dayLabel = "Aujourd'hui";
+  else if (diff === 1) dayLabel = 'Demain';
+  else if (diff === -1) dayLabel = 'Hier';
+  else if (diff < 0) dayLabel = `Il y a ${Math.abs(diff)} j`;
+  else if (diff < 7) dayLabel = `Dans ${diff} j`;
+  else {
+    dayLabel = ref.toLocaleDateString('fr-FR', {
       day: 'numeric',
       month: 'short',
       year: ref.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
-    }) + time
-  );
+    });
+  }
+
+  if (t.all_day) return dayLabel;
+
+  if (start && end) {
+    return `${dayLabel}, ${formatTime(start)} → ${formatTime(end)}`;
+  }
+
+  return `${dayLabel}, ${formatTime(ref)}`;
 }
 
 export default function TaskListView({ hiddenListIds }: Props) {
@@ -144,7 +163,6 @@ export default function TaskListView({ hiddenListIds }: Props) {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
-
   const [linksOpen, setLinksOpen] = useState(false);
   const [linksTask, setLinksTask] = useState<Task | null>(null);
 
@@ -205,43 +223,6 @@ export default function TaskListView({ hiddenListIds }: Props) {
   const linkCount = (t: Task) =>
     Array.isArray(t.links) ? t.links.length : 0;
 
-  const handleExport = async () => {
-    try {
-      const path = await save({
-        defaultPath: `tasks-export-${new Date().toISOString().slice(0, 10)}.json`,
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-      });
-      if (!path) return;
-      const count = await api.exportToFile(path);
-      alert(`Export réussi : ${count} tâche(s) exportée(s).`);
-    } catch (e) {
-      alert('Erreur export : ' + e);
-    }
-  };
-
-  const handleImport = async () => {
-    try {
-      const path = await open({
-        multiple: false,
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-      });
-      if (!path || typeof path !== 'string') return;
-      if (
-        !confirm(
-          'Importer ce fichier ? Les tâches existantes seront conservées, seules les nouvelles seront ajoutées.'
-        )
-      )
-        return;
-      const report = await api.importFromFile(path);
-      alert(
-        `Import terminé :\n${report.tasks_inserted} tâche(s)\n${report.lists_inserted} liste(s)`
-      );
-      await load(true);
-    } catch (e) {
-      alert('Erreur import : ' + e);
-    }
-  };
-
   return (
     <>
       <div className="list-toolbar">
@@ -252,22 +233,6 @@ export default function TaskListView({ hiddenListIds }: Props) {
           title="Nouvelle tâche"
         >
           + Ajouter
-        </button>
-        <button
-          type="button"
-          className="btn-import"
-          onClick={handleImport}
-          title="Importer depuis un fichier JSON"
-        >
-          📥 Importer
-        </button>
-        <button
-          type="button"
-          className="btn-export"
-          onClick={handleExport}
-          title="Exporter vers un fichier JSON"
-        >
-          📤 Exporter
         </button>
       </div>
 

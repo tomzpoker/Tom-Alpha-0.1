@@ -5,6 +5,7 @@ import interactionPlugin from '@fullcalendar/interaction';
 import frLocale from '@fullcalendar/core/locales/fr';
 import { useEffect, useRef, useState } from 'react';
 import { api, type TaskStatus } from '../lib/api';
+import { useZoom } from '../hooks/useZoom';
 
 interface Props {
   hiddenListIds: Set<string>;
@@ -24,7 +25,16 @@ const nextStatus: Record<TaskStatus, TaskStatus> = {
   done: 'todo',
 };
 
+function toMidnight(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
 export default function CalendarView({ hiddenListIds }: Props) {
+  const zoom = useZoom();
+  const isLargeZoom = zoom >= 130;
+
   const [view, setView] = useState<View>('dayGridMonth');
   const [events, setEvents] = useState<any[]>([]);
   const calendarRef = useRef<FullCalendar>(null);
@@ -41,6 +51,39 @@ export default function CalendarView({ hiddenListIds }: Props) {
 
     setEvents(
       visible.map((t) => {
+        // ---- Cas tâche "toute la journée" ----
+        // On normalise start/end à minuit, et on ajoute +1 jour à end
+        // car FullCalendar considère end comme EXCLUSIF.
+        // Sans ça, une tâche finissant à 23h59 le 12 oct. débordait
+        // visuellement sur le 13 oct.
+        if (t.all_day) {
+          const refStart = t.start_at ?? t.end_at;
+          const refEnd = t.end_at ?? t.start_at;
+          if (!refStart || !refEnd) return null;
+
+          const sd = toMidnight(new Date(refStart));
+          const ed = toMidnight(new Date(refEnd));
+          const sameDay = sd.getTime() === ed.getTime();
+
+          const start = sd.toISOString();
+          const end = new Date(ed);
+          end.setDate(end.getDate() + 1);
+
+          return {
+            id: t.id,
+            title: t.title,
+            start,
+            // Si la tâche ne dure qu'un jour, on n'envoie PAS de end :
+            // FullCalendar affiche alors une barre d'une seule journée.
+            end: sameDay ? undefined : end.toISOString(),
+            allDay: true,
+            backgroundColor: statusColor[t.status],
+            borderColor: statusColor[t.status],
+            extendedProps: { status: t.status },
+          };
+        }
+
+        // ---- Cas tâche horaire ----
         let start = t.start_at ?? t.end_at ?? undefined;
         let end: string | undefined = undefined;
 
@@ -54,13 +97,7 @@ export default function CalendarView({ hiddenListIds }: Props) {
 
           if (!sameDay) {
             start = t.start_at;
-            if (t.all_day) {
-              const plus1 = new Date(ed);
-              plus1.setDate(plus1.getDate() + 1);
-              end = plus1.toISOString();
-            } else {
-              end = t.end_at;
-            }
+            end = t.end_at;
           }
         }
 
@@ -69,12 +106,12 @@ export default function CalendarView({ hiddenListIds }: Props) {
           title: t.title,
           start,
           end,
-          allDay: t.all_day,
+          allDay: false,
           backgroundColor: statusColor[t.status],
           borderColor: statusColor[t.status],
           extendedProps: { status: t.status },
         };
-      })
+      }).filter(Boolean)
     );
   };
 
@@ -89,7 +126,6 @@ export default function CalendarView({ hiddenListIds }: Props) {
     };
   }, [hiddenListIds]);
 
-  // Polling silencieux toutes les 20s
   useEffect(() => {
     const interval = setInterval(() => {
       load();
@@ -109,7 +145,7 @@ export default function CalendarView({ hiddenListIds }: Props) {
       clearTimeout(t3);
       window.removeEventListener('resize', forceResize);
     };
-  }, [view, hiddenListIds]);
+  }, [view, hiddenListIds, isLargeZoom]);
 
   return (
     <div className="calendar-container">
@@ -156,7 +192,7 @@ export default function CalendarView({ hiddenListIds }: Props) {
         editable
         displayEventTime={false}
         eventDisplay="block"
-        dayMaxEvents={3}
+        dayMaxEvents={isLargeZoom ? 5 : 3}
         eventClick={async (info) => {
           const current = info.event.extendedProps.status as TaskStatus;
           await api.setStatus(info.event.id, nextStatus[current]);

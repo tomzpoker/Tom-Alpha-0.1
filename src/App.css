@@ -1023,3 +1023,96 @@ html, body, #root {
 .link-button:hover {
   color: #1d4ed8;
 }
+
+/* ---- Toast de zoom ---- */
+.zoom-toast {
+  position: fixed;
+  top: 60px;
+  right: 16px;
+  background: rgba(30, 41, 59, 0.92);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  z-index: 999;
+  animation: zoom-toast-in 0.15s ease-out;
+  pointer-events: none;
+  font-family: inherit;
+}
+@keyframes zoom-toast-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* ---- Sections dans la modale Paramètres ---- */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+.settings-section + .settings-section {
+  margin-top: 4px;
+}
+
+.settings-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.settings-hint {
+  font-size: 11px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.settings-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.settings-action-btn {
+  width: 100%;
+  text-align: left;
+  justify-content: flex-start;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  transition: all 0.15s;
+}
+.settings-action-btn:hover:not(:disabled) {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+.settings-action-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.settings-info {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #059669;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-top: 2px;
+}

@@ -5,6 +5,7 @@ import TaskListView from './components/TaskListView';
 import ListFilter from './components/ListFilter';
 import ListManagerModal from './components/ListManagerModal';
 import { api, type TaskList } from './lib/api';
+import { applyZoomPct, getZoomPct, zoomIn, zoomOut } from './lib/zoom';
 import './App.css';
 
 type Mode = 'list' | 'calendar';
@@ -13,6 +14,7 @@ export default function App() {
   const [mode, setMode] = useState<Mode>('list');
   const [lists, setLists] = useState<TaskList[]>([]);
   const [managerOpen, setManagerOpen] = useState(false);
+  const [zoomToast, setZoomToast] = useState<number | null>(null);
 
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => {
     try {
@@ -24,6 +26,49 @@ export default function App() {
   });
 
   const win = getCurrentWindow();
+
+  // Applique le zoom sauvegardé au démarrage
+  useEffect(() => {
+    const saved = getZoomPct();
+    if (saved !== 100) {
+      applyZoomPct(saved);
+    }
+  }, []);
+
+  // Zoom via Ctrl + molette uniquement
+  useEffect(() => {
+    let toastTimer: number | undefined;
+    let lastWheelAt = 0;
+
+    const showToast = (pct: number) => {
+      setZoomToast(pct);
+      if (toastTimer) window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => setZoomToast(null), 1200);
+    };
+
+    const handleWheel = async (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const now = Date.now();
+      if (now - lastWheelAt < 30) return;
+      lastWheelAt = now;
+
+      const pct = e.deltaY < 0 ? await zoomIn() : await zoomOut();
+      showToast(pct);
+    };
+
+    window.addEventListener('wheel', handleWheel, {
+      passive: false,
+      capture: true,
+    });
+
+    return () => {
+      window.removeEventListener('wheel', handleWheel, true);
+      if (toastTimer) window.clearTimeout(toastTimer);
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('hiddenListIds', JSON.stringify([...hiddenIds]));
@@ -48,7 +93,6 @@ export default function App() {
     };
   }, [loadLists]);
 
-  // Polling silencieux toutes les 20s
   useEffect(() => {
     const interval = setInterval(() => {
       loadLists();
@@ -153,6 +197,10 @@ export default function App() {
         onClose={() => setManagerOpen(false)}
         onChanged={loadLists}
       />
+
+      {zoomToast !== null && (
+        <div className="zoom-toast">Zoom : {zoomToast}%</div>
+      )}
     </div>
   );
 }
