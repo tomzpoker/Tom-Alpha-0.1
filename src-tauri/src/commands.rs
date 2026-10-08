@@ -2,6 +2,7 @@ use crate::db::Db;
 use crate::models::{Task, TaskList, TaskStatus};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
+use std::io::Write;
 use tauri::State;
 use uuid::Uuid;
 
@@ -13,6 +14,8 @@ pub enum AppError {
     Io(#[from] std::io::Error),
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("zip error: {0}")]
+    Zip(#[from] zip::result::ZipError),
     #[error("not found")]
     NotFound,
 }
@@ -185,6 +188,25 @@ pub async fn save_task(
     .bind(start_at)
     .bind(end_at)
     .bind(all_day)
+    .fetch_one(&*db)
+    .await?;
+    Ok(task)
+}
+
+#[tauri::command]
+pub async fn update_task_links(
+    db: State<'_, Db>,
+    id: Uuid,
+    links: serde_json::Value,
+) -> Result<Task, AppError> {
+    let task = sqlx::query_as::<_, Task>(
+        r#"
+        UPDATE tasks SET links = $2 WHERE id = $1
+        RETURNING *, NULL::text AS list_name, NULL::text AS list_color
+        "#,
+    )
+    .bind(id)
+    .bind(links)
     .fetch_one(&*db)
     .await?;
     Ok(task)
@@ -367,8 +389,8 @@ pub async fn import_from_file(
             r#"
             INSERT INTO tasks
                 (id, list_id, title, description, status, start_at, end_at,
-                 all_day, tags, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                 all_day, tags, metadata, links)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             ON CONFLICT (id) DO NOTHING
             "#,
         )
@@ -382,6 +404,7 @@ pub async fn import_from_file(
         .bind(t.all_day)
         .bind(&t.tags)
         .bind(&t.metadata)
+        .bind(&t.links)
         .execute(&mut *tx)
         .await?;
         tasks_inserted += r.rows_affected() as usize;
@@ -393,4 +416,88 @@ pub async fn import_from_file(
         lists_inserted,
         tasks_inserted,
     })
+}
+
+#[tauri::command]
+pub async fn zip_task_links(
+    db: State<'_, Db>,
+    id: Uuid,
+    output_path: String,
+) -> Result<usize, AppError> {
+    let task = sqlx::query_as::<_, Task>(
+        "SELECT t.*, NULL::text AS list_name, NULL::text AS list_color
+         FROM tasks t WHERE t.id = $1",
+    )
+    .bind(id)
+    .fetch_one(&*db)
+    .await?;
+
+    let links: Vec<serde_json::Value> =
+        serde_json::from_value(task.links.clone()).unwrap_or_default();
+
+    let file = std::fs::File::create(&output_path)?;
+    let mut zip_writer = zip::ZipWriter::new(file);
+    let options: zip::write::SimpleFileOptions =
+        zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+
+    let mut files_added = 0usize;
+    let mut url_lines: Vec<String> = Vec::new();
+    let mut used_names: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+
+    for l in links {
+        let kind = l.get("kind").and_then(|v| v.as_str()).unwrap_or("url");
+        let url = l.get("url").and_then(|v| v.as_str()).unwrap_or("");
+        let title = l.get("title").and_then(|v| v.as_str()).unwrap_or("");
+
+        if kind == "file" {
+            let path = std::path::Path::new(url);
+            if !path.exists() {
+                continue;
+            }
+            let original_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("fichier");
+
+            let mut candidate = original_name.to_string();
+            let mut n = 1;
+            while used_names.contains(&candidate) {
+                let stem = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("fichier");
+                let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+                candidate = if ext.is_empty() {
+                    format!("{}_{}", stem, n)
+                } else {
+                    format!("{}_{}.{}", stem, n, ext)
+                };
+                n += 1;
+            }
+            used_names.insert(candidate.clone());
+
+            if let Ok(content) = std::fs::read(path) {
+                zip_writer.start_file(&candidate, options)?;
+                zip_writer.write_all(&content)?;
+                files_added += 1;
+            }
+        } else {
+            url_lines.push(format!("- {} : {}", title, url));
+        }
+    }
+
+    if !url_lines.is_empty() {
+        let content = format!(
+            "# Liens web associés à la tâche : {}\n\n{}",
+            task.title,
+            url_lines.join("\n")
+        );
+        zip_writer.start_file("liens.txt", options)?;
+        zip_writer.write_all(content.as_bytes())?;
+    }
+
+    zip_writer.finish()?;
+    Ok(files_added)
 }

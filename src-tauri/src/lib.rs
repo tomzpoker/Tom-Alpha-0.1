@@ -9,6 +9,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             if let Some(w) = app.get_webview_window("widget") {
@@ -50,6 +51,7 @@ pub fn run() {
             commands::create_task_full,
             commands::update_task,
             commands::save_task,
+            commands::update_task_links,
             commands::delete_task,
             commands::set_task_status,
             commands::list_task_lists,
@@ -59,6 +61,7 @@ pub fn run() {
             commands::bulk_import_tasks,
             commands::export_to_file,
             commands::import_from_file,
+            commands::zip_task_links,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -237,7 +237,7 @@ html, body, #root {
   margin-top: 1px !important;
 }
 
-/* ---- Multi-month (trimestre/année) ---- */
+/* ---- Multi-month ---- */
 .fc .fc-multimonth { border: none !important; }
 .fc .fc-multimonth-month {
   border: 1px solid #e2e8f0 !important;
@@ -282,9 +282,6 @@ html, body, #root {
 
 /* ============================================================
    ÉVÉNEMENTS MULTI-JOURS — RÈGLE CRITIQUE
-   FullCalendar positionne les barres multi-jours en absolute à
-   travers plusieurs colonnes. AUCUN parent ne doit avoir
-   overflow: hidden, sinon chaque barre est tronquée à 1 colonne.
    ============================================================ */
 .fc .fc-daygrid-day,
 .fc .fc-daygrid-day-frame,
@@ -609,7 +606,7 @@ html, body, #root {
   text-align: center;
 }
 
-/* ---- Modale ---- */
+/* ---- Modale générique ---- */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -640,7 +637,39 @@ html, body, #root {
   border-bottom: 1px solid #f1f5f9;
   background: #f8fafc;
 }
-.modal-header h2 { margin: 0; font-size: 14px; font-weight: 700; color: #1e293b; }
+.modal-header h2 { margin: 0; font-size: 14px; font-weight: 700; color: #1e293b; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.modal-icon-btn {
+  background: transparent;
+  border: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #94a3b8;
+  transition: all 0.15s;
+  padding: 0;
+}
+.modal-icon-btn:hover:not(:disabled) {
+  background: #eff6ff;
+  color: #3b82f6;
+}
+.modal-icon-btn:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .modal-close {
   background: transparent;
   border: none;
@@ -652,6 +681,7 @@ html, body, #root {
   border-radius: 6px;
 }
 .modal-close:hover { background: #e2e8f0; color: #1e293b; }
+
 .modal-body {
   padding: 14px 16px;
   overflow-y: auto;
@@ -736,4 +766,260 @@ html, body, #root {
   padding: 7px 10px;
   border-radius: 6px;
   margin-top: 2px;
+}
+
+.zip-success-msg {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #059669;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 7px 10px;
+  border-radius: 6px;
+  margin-bottom: 2px;
+}
+
+/* ---- Bouton dossier sur les tâches ---- */
+.task-folder-btn {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.task-folder-btn:hover {
+  background: #f1f5f9;
+  color: #64748b;
+}
+.task-folder-btn.has-links {
+  color: #3b82f6;
+}
+.task-folder-btn.has-links:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.task-folder-count {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background: #3b82f6;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 1px 4px;
+  min-width: 14px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+/* ---- Modale Documents ---- */
+.task-links-modal {
+  max-width: 440px;
+}
+
+.links-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.link-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+.link-item:hover {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+.link-item.editing {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.link-open {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  border-radius: 6px;
+  min-width: 0;
+}
+.link-open:hover .link-title {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.link-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  width: 26px;
+  text-align: center;
+}
+
+.link-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.link-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.link-desc {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.link-url {
+  font-size: 10px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: "Consolas", "Menlo", monospace;
+}
+
+.link-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.file-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.file-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+.file-input-row .btn-secondary {
+  white-space: nowrap;
+  font-size: 11px;
+  padding: 6px 10px;
+}
+
+/* ---- Zone de drag & drop fichier ---- */
+.file-drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+  border-radius: 10px;
+  transition: all 0.2s;
+  min-height: 140px;
+  text-align: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.file-drop-zone.compact {
+  min-height: 110px;
+  padding: 18px 12px;
+}
+
+.file-drop-zone.drag-over {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  border-style: solid;
+  transform: scale(1.02);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+}
+
+.file-drop-zone.flash-success {
+  background: #ecfdf5;
+  border-color: #10b981;
+  border-style: solid;
+  animation: pulse-success 0.5s ease-out;
+}
+
+@keyframes pulse-success {
+  0% { transform: scale(1.02); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.2); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.file-drop-icon {
+  font-size: 32px;
+  margin-bottom: 4px;
+  line-height: 1;
+}
+.file-drop-zone.compact .file-drop-icon {
+  font-size: 24px;
+}
+
+.file-drop-hint {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.file-drop-hint-sub {
+  font-size: 10px;
+  color: #94a3b8;
+  font-style: italic;
+  margin-bottom: 6px;
+}
+
+.file-drop-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.file-drop-zone .btn-secondary {
+  font-size: 11px;
+  padding: 5px 12px;
+}
+
+.link-button {
+  background: transparent;
+  border: none;
+  color: #3b82f6;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-family: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s;
+}
+.link-button:hover {
+  color: #1d4ed8;
 }

@@ -36,7 +36,7 @@ export default function TaskModal({ open, onClose, onSaved, task }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    api.lists().then(setLists);
+    api.lists().then(setLists).catch(() => {});
     setError(null);
 
     if (task) {
@@ -62,22 +62,16 @@ export default function TaskModal({ open, onClose, onSaved, task }: Props) {
 
   if (!open) return null;
 
-  /** Met à jour le début ET ajuste la fin si elle devient antérieure */
   const handleStartChange = (value: string) => {
     setStartAt(value);
     setError(null);
     if (!value) return;
     if (!endAt || new Date(endAt) < new Date(value)) {
-      // Si "toute la journée", la fin suit le début à la même date
-      if (allDay) {
-        setEndAt(value);
-      } else {
-        setEndAt(addHour(value, 1));
-      }
+      if (allDay) setEndAt(value);
+      else setEndAt(addHour(value, 1));
     }
   };
 
-  /** Empêche l'utilisateur de saisir une fin < début */
   const handleEndChange = (value: string) => {
     if (startAt && value && new Date(value) < new Date(startAt)) {
       setError('La date de fin ne peut pas être antérieure à la date de début.');
@@ -90,7 +84,6 @@ export default function TaskModal({ open, onClose, onSaved, task }: Props) {
   const handleAllDayChange = (checked: boolean) => {
     setAllDay(checked);
     setError(null);
-    // Recaler les dates au format adapté
     if (checked) {
       const s = startAt ? startAt.split('T')[0] + 'T00:00' : '';
       const e = endAt ? endAt.split('T')[0] + 'T23:59' : s;
@@ -144,14 +137,20 @@ export default function TaskModal({ open, onClose, onSaved, task }: Props) {
     onClose();
   };
 
-  const endInvalid = !!(startAt && endAt && new Date(endAt) < new Date(startAt));
+  const endInvalid = !!(
+    startAt &&
+    endAt &&
+    new Date(endAt) < new Date(startAt)
+  );
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{isEdit ? 'Modifier la tâche' : 'Nouvelle tâche'}</h2>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <div className="modal-header-actions">
+            <button className="modal-close" onClick={onClose}>✕</button>
+          </div>
         </div>
 
         <div className="modal-body">
@@ -179,20 +178,28 @@ export default function TaskModal({ open, onClose, onSaved, task }: Props) {
           <div className="modal-row">
             <label className="field">
               <span>Liste</span>
-              <select value={listId} onChange={(e) => setListId(e.target.value)}>
+              <select
+                value={listId}
+                onChange={(e) => setListId(e.target.value)}
+              >
                 <option value="">— Aucune —</option>
                 {lists.map((l) => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
                 ))}
               </select>
             </label>
 
             <label className="field">
               <span>Statut</span>
-              <select value={status} onChange={(e) => setStatus(e.target.value as TaskStatus)}>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as TaskStatus)}
+              >
                 <option value="todo">À faire</option>
                 <option value="in_progress">En cours</option>
-                <option value="validated">Validé</option>
+                <option value="done">Validé</option>
               </select>
             </label>
           </div>
@@ -212,9 +219,11 @@ export default function TaskModal({ open, onClose, onSaved, task }: Props) {
               <input
                 type={allDay ? 'date' : 'datetime-local'}
                 value={allDay ? startAt.split('T')[0] : startAt}
-                onChange={(e) => handleStartChange(
-                  allDay ? e.target.value + 'T00:00' : e.target.value
-                )}
+                onChange={(e) =>
+                  handleStartChange(
+                    allDay ? e.target.value + 'T00:00' : e.target.value
+                  )
+                }
               />
             </label>
             <label className="field">
@@ -223,9 +232,11 @@ export default function TaskModal({ open, onClose, onSaved, task }: Props) {
                 type={allDay ? 'date' : 'datetime-local'}
                 value={allDay ? endAt.split('T')[0] : endAt}
                 min={allDay ? startAt.split('T')[0] : startAt}
-                onChange={(e) => handleEndChange(
-                  allDay ? e.target.value + 'T23:59' : e.target.value
-                )}
+                onChange={(e) =>
+                  handleEndChange(
+                    allDay ? e.target.value + 'T23:59' : e.target.value
+                  )
+                }
                 className={endInvalid ? 'input-invalid' : ''}
               />
             </label>
@@ -241,7 +252,9 @@ export default function TaskModal({ open, onClose, onSaved, task }: Props) {
             </button>
           )}
           <div style={{ flex: 1 }} />
-          <button className="btn-secondary" onClick={onClose}>Annuler</button>
+          <button className="btn-secondary" onClick={onClose}>
+            Annuler
+          </button>
           <button
             className="btn-primary"
             onClick={handleSave}

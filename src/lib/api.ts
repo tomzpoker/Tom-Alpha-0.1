@@ -3,6 +3,14 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 export type TaskStatus = 'todo' | 'in_progress' | 'done';
 
+export interface TaskLink {
+  id: string;
+  kind: 'url' | 'file';
+  url: string;
+  title: string;
+  description?: string;
+}
+
 export interface Task {
   id: string;
   list_id: string | null;
@@ -14,6 +22,7 @@ export interface Task {
   all_day: boolean;
   tags: string[];
   metadata: Record<string, unknown>;
+  links: TaskLink[];
   created_at: string;
   updated_at: string;
   list_name: string | null;
@@ -68,6 +77,9 @@ export const api = {
   saveFull: (id: string, payload: TaskPayload) =>
     invoke<Task>('save_task', { id, ...payload }),
 
+  updateLinks: (id: string, links: TaskLink[]) =>
+    invoke<Task>('update_task_links', { id, links }),
+
   setStatus: (id: string, status: TaskStatus) =>
     invoke<Task>('set_task_status', { id, status }),
 
@@ -93,8 +105,7 @@ export const api = {
   updateList: (id: string, name: string, color: string) =>
     invoke<TaskList>('update_task_list', { id, name, color }),
 
-  deleteList: (id: string) =>
-    invoke<void>('delete_task_list', { id }),
+  deleteList: (id: string) => invoke<void>('delete_task_list', { id }),
 
   bulkImport: (items: unknown[]) => invoke<number>('bulk_import_tasks', { items }),
 
@@ -103,6 +114,9 @@ export const api = {
 
   importFromFile: (path: string) =>
     invoke<ImportReport>('import_from_file', { path }),
+
+  zipTaskLinks: (id: string, outputPath: string) =>
+    invoke<number>('zip_task_links', { id, outputPath }),
 
   onChanged: (cb: () => void): Promise<UnlistenFn> =>
     listen<string>('tasks:changed', () => cb()),

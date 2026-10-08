@@ -17,6 +17,12 @@
     "core:event:default",
     "store:default",
     "dialog:default",
-    "global-shortcut:default"
+    "global-shortcut:default",
+    "opener:default",
+    "opener:allow-open-url",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [{ "path": "**" }]
+    }
   ]
 }

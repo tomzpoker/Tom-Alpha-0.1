@@ -24,6 +24,7 @@ pub struct Task {
     pub all_day: bool,
     pub tags: Vec<String>,
     pub metadata: serde_json::Value,
+    pub links: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub list_name: Option<String>,

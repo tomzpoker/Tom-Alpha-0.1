@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { api, type Task, type TaskStatus } from '../lib/api';
 import TaskModal from './TaskModal';
+import TaskLinksModal from './TaskLinksModal';
 
 interface Props {
   hiddenListIds: Set<string>;
@@ -55,13 +56,13 @@ function getReferenceDate(t: Task, now: Date): Date | null {
 function groupTasks(tasks: Task[]): Group[] {
   const now = new Date();
   const groups: Group[] = [
-    { key: 'overdue',  label: '⏰ En retard',    tasks: [] },
-    { key: 'today',    label: "Aujourd'hui",    tasks: [] },
-    { key: 'tomorrow', label: 'Demain',         tasks: [] },
-    { key: 'week',     label: 'Cette semaine',  tasks: [] },
-    { key: 'month',    label: 'Ce mois-ci',     tasks: [] },
-    { key: 'later',    label: 'Plus tard',      tasks: [] },
-    { key: 'none',     label: 'Sans échéance',  tasks: [] },
+    { key: 'overdue',  label: '⏰ En retard',         tasks: [] },
+    { key: 'today',    label: "Aujourd'hui",         tasks: [] },
+    { key: 'tomorrow', label: 'Demain',              tasks: [] },
+    { key: 'week',     label: 'Cette semaine',       tasks: [] },
+    { key: 'month',    label: '30 prochains jours',  tasks: [] },
+    { key: 'later',    label: 'Plus tard',           tasks: [] },
+    { key: 'none',     label: 'Sans échéance',       tasks: [] },
   ];
 
   for (const t of tasks) {
@@ -76,7 +77,7 @@ function groupTasks(tasks: Task[]): Group[] {
     else if (diff === 0) groups[1].tasks.push(t);
     else if (diff === 1) groups[2].tasks.push(t);
     else if (diff <= 7) groups[3].tasks.push(t);
-    else if (diff <= 31) groups[4].tasks.push(t);
+    else if (diff <= 30) groups[4].tasks.push(t);
     else groups[5].tasks.push(t);
   }
 
@@ -144,6 +145,9 @@ export default function TaskListView({ hiddenListIds }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
 
+  const [linksOpen, setLinksOpen] = useState(false);
+  const [linksTask, setLinksTask] = useState<Task | null>(null);
+
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
     const now = new Date();
@@ -165,7 +169,6 @@ export default function TaskListView({ hiddenListIds }: Props) {
     };
   }, []);
 
-  // Polling silencieux toutes les 20s
   useEffect(() => {
     const interval = setInterval(() => {
       load(true);
@@ -192,6 +195,15 @@ export default function TaskListView({ hiddenListIds }: Props) {
     setEditing(null);
     setModalOpen(true);
   };
+
+  const openLinks = (t: Task, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLinksTask(t);
+    setLinksOpen(true);
+  };
+
+  const linkCount = (t: Task) =>
+    Array.isArray(t.links) ? t.links.length : 0;
 
   const handleExport = async () => {
     try {
@@ -233,10 +245,16 @@ export default function TaskListView({ hiddenListIds }: Props) {
   return (
     <>
       <div className="list-toolbar">
-        <button className="btn-add" onClick={openCreate} title="Nouvelle tâche">
+        <button
+          type="button"
+          className="btn-add"
+          onClick={openCreate}
+          title="Nouvelle tâche"
+        >
           + Ajouter
         </button>
         <button
+          type="button"
           className="btn-import"
           onClick={handleImport}
           title="Importer depuis un fichier JSON"
@@ -244,6 +262,7 @@ export default function TaskListView({ hiddenListIds }: Props) {
           📥 Importer
         </button>
         <button
+          type="button"
           className="btn-export"
           onClick={handleExport}
           title="Exporter vers un fichier JSON"
@@ -267,47 +286,76 @@ export default function TaskListView({ hiddenListIds }: Props) {
                 <span>{g.label}</span>
                 <span className="task-group-count">{g.tasks.length}</span>
               </div>
-              {g.tasks.map((t) => (
-                <div
-                  key={t.id}
-                  className={`task-item status-${t.status}`}
-                  onClick={() => openEdit(t)}
-                  title="Cliquer pour modifier"
-                >
-                  <span
-                    className="task-dot"
-                    style={{ background: statusColor[t.status] }}
-                  />
-                  <div className="task-body">
-                    <div className="task-title">{t.title}</div>
-                    <div className="task-meta">
-                      {formatDate(t) && <span>{formatDate(t)}</span>}
+              {g.tasks.map((t) => {
+                const count = linkCount(t);
+                return (
+                  <div
+                    key={t.id}
+                    className={`task-item status-${t.status}`}
+                    onClick={() => openEdit(t)}
+                    title="Cliquer pour modifier"
+                  >
+                    <span
+                      className="task-dot"
+                      style={{ background: statusColor[t.status] }}
+                    />
+                    <div className="task-body">
+                      <div className="task-title">{t.title}</div>
+                      <div className="task-meta">
+                        {formatDate(t) && <span>{formatDate(t)}</span>}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className={`task-folder-btn ${count > 0 ? 'has-links' : ''}`}
+                      onClick={(e) => openLinks(t, e)}
+                      title={
+                        count > 0
+                          ? `${count} document(s) — cliquer pour ouvrir`
+                          : 'Ajouter des documents'
+                      }
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                      </svg>
+                      {count > 0 && (
+                        <span className="task-folder-count">{count}</span>
+                      )}
+                    </button>
+                    <div className="task-right">
+                      <span
+                        className="task-status-badge"
+                        style={{
+                          color: statusColor[t.status],
+                          borderColor: statusColor[t.status],
+                        }}
+                        onClick={(e) => cycleStatus(t, e)}
+                        title="Changer le statut"
+                      >
+                        {statusLabel[t.status]}
+                      </span>
+                      {t.list_name && (
+                        <span className="task-list-tag">
+                          <span
+                            className="task-list-dot"
+                            style={{ background: t.list_color ?? '#94a3b8' }}
+                          />
+                          {t.list_name}
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <div className="task-right">
-                    <span
-                      className="task-status-badge"
-                      style={{
-                        color: statusColor[t.status],
-                        borderColor: statusColor[t.status],
-                      }}
-                      onClick={(e) => cycleStatus(t, e)}
-                      title="Changer le statut"
-                    >
-                      {statusLabel[t.status]}
-                    </span>
-                    {t.list_name && (
-                      <span className="task-list-tag">
-                        <span
-                          className="task-list-dot"
-                          style={{ background: t.list_color ?? '#94a3b8' }}
-                        />
-                        {t.list_name}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ))}
         </div>
@@ -318,6 +366,13 @@ export default function TaskListView({ hiddenListIds }: Props) {
         onClose={() => setModalOpen(false)}
         onSaved={load}
         task={editing}
+      />
+
+      <TaskLinksModal
+        open={linksOpen}
+        onClose={() => setLinksOpen(false)}
+        task={linksTask}
+        onUpdated={() => load(true)}
       />
     </>
   );
