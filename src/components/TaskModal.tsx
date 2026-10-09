@@ -34,31 +34,47 @@ export default function TaskModal({ open, onClose, onSaved, task }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Charge les listes à l'ouverture
   useEffect(() => {
     if (!open) return;
     api.lists().then(setLists).catch(() => {});
     setError(null);
+  }, [open]);
 
-    if (task) {
-      setTitle(task.title);
-      setDescription(task.description ?? '');
-      setListId(task.list_id ?? '');
-      setStatus(task.status);
-      setStartAt(task.start_at ? toLocalInput(task.start_at) : '');
-      setEndAt(task.end_at ? toLocalInput(task.end_at) : '');
-      setAllDay(task.all_day);
-    } else {
-      const now = new Date();
-      const later = new Date(now.getTime() + 3600_000);
-      setTitle('');
-      setDescription('');
-      setListId('');
-      setStatus('todo');
-      setStartAt(toLocalInput(now.toISOString()));
-      setEndAt(toLocalInput(later.toISOString()));
-      setAllDay(false);
+  // Charge les champs depuis la tâche (quand on change de tâche ou qu'on ouvre)
+  useEffect(() => {
+    if (!open || !task) {
+      if (open && !task) {
+        // Nouvelle tâche
+        const now = new Date();
+        const later = new Date(now.getTime() + 3600_000);
+        setTitle('');
+        setDescription('');
+        setListId('');
+        setStatus('todo');
+        setStartAt(toLocalInput(now.toISOString()));
+        setEndAt(toLocalInput(later.toISOString()));
+        setAllDay(false);
+      }
+      return;
     }
-  }, [open, task]);
+
+    setTitle(task.title);
+    setDescription(task.description ?? '');
+    setListId(task.list_id ?? '');
+    setStatus(task.status);
+    setStartAt(task.start_at ? toLocalInput(task.start_at) : '');
+    setEndAt(task.end_at ? toLocalInput(task.end_at) : '');
+    setAllDay(task.all_day);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, task?.id]);
+
+  // ⭐ Si le statut de la tâche change depuis l'extérieur (autre PC, clic sur
+  // le badge dans la liste, etc.), on met à jour le dropdown tout seul.
+  useEffect(() => {
+    if (!open || !task) return;
+    setStatus(task.status);
+  }, [open, task?.id, task?.status]);
 
   if (!open) return null;
 

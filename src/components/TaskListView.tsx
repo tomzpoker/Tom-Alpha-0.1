@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type Task, type TaskStatus } from '../lib/api';
+import { formatTaskDate } from '../lib/formatDate';
 import TaskModal from './TaskModal';
 import TaskLinksModal from './TaskLinksModal';
 
@@ -14,9 +15,18 @@ const statusLabel: Record<TaskStatus, string> = {
 };
 
 const statusColor: Record<TaskStatus, string> = {
-  todo: '#3b82f6',
-  in_progress: '#f59e0b',
-  done: '#10b981',
+  todo: '#60a5fa',
+  in_progress: '#fbbf24',
+  done: '#34d399',
+};
+
+const statusBadgeStyle: Record<
+  TaskStatus,
+  { bg: string; text: string; border: string }
+> = {
+  todo:        { bg: '#dbeafe', text: '#1e40af', border: '#93c5fd' },
+  in_progress: { bg: '#fef3c7', text: '#b45309', border: '#fcd34d' },
+  done:        { bg: '#d1fae5', text: '#047857', border: '#86efac' },
 };
 
 const nextStatus: Record<TaskStatus, TaskStatus> = {
@@ -33,17 +43,30 @@ function startOfDay(d: Date) {
   return x;
 }
 
+function endOfDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
 function daysBetween(a: Date, b: Date) {
   return Math.floor(
     (startOfDay(b).getTime() - startOfDay(a).getTime()) / 86400000
   );
 }
 
-/** "10h00", "10h30" — toujours 2 chiffres pour les minutes */
-function formatTime(d: Date): string {
-  const h = d.getHours().toString().padStart(2, '0');
-  const m = d.getMinutes().toString().padStart(2, '0');
-  return `${h}h${m}`;
+/** Dimanche 23h59:59 de la semaine calendaire contenant `ref` (semaine lundi→dimanche) */
+function getWeekEnd(ref: Date): Date {
+  const d = new Date(ref);
+  const day = d.getDay(); // 0 = dimanche, 1 = lundi, ..., 6 = samedi
+  const daysUntilSunday = day === 0 ? 0 : 7 - day;
+  d.setDate(d.getDate() + daysUntilSunday);
+  return endOfDay(d);
+}
+
+/** Dernier jour du mois 23h59:59 */
+function getMonthEnd(ref: Date): Date {
+  return new Date(ref.getFullYear(), ref.getMonth() + 1, 0, 23, 59, 59, 999);
 }
 
 function getReferenceDate(t: Task, now: Date): Date | null {
@@ -61,30 +84,65 @@ function getReferenceDate(t: Task, now: Date): Date | null {
 
 function groupTasks(tasks: Task[]): Group[] {
   const now = new Date();
+  const today = startOfDay(now);
+
+  // Fin de la semaine calendaire en cours (dimanche 23:59:59)
+  const weekEnd = getWeekEnd(today);
+
+  // Début et fin de la semaine calendaire suivante (lundi → dimanche)
+  const nextWeekStart = new Date(weekEnd);
+  nextWeekStart.setDate(weekEnd.getDate() + 1);
+  nextWeekStart.setHours(0, 0, 0, 0);
+  const nextWeekEnd = new Date(nextWeekStart);
+  nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
+  nextWeekEnd.setHours(23, 59, 59, 999);
+
+  // Fin du mois calendaire en cours
+  const monthEnd = getMonthEnd(today);
+
+  // Mois calendaire suivant
+  const nextMonthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1, 0, 0, 0, 0);
+  const nextMonthEnd = getMonthEnd(nextMonthStart);
+
   const groups: Group[] = [
-    { key: 'overdue',  label: '⏰ En retard',        tasks: [] },
-    { key: 'today',    label: "Aujourd'hui",        tasks: [] },
-    { key: 'tomorrow', label: 'Demain',             tasks: [] },
-    { key: 'week',     label: 'Cette semaine',      tasks: [] },
-    { key: 'month',    label: '30 prochains jours', tasks: [] },
-    { key: 'later',    label: 'Plus tard',          tasks: [] },
-    { key: 'none',     label: 'Sans échéance',      tasks: [] },
+    { key: 'overdue',    label: '⏰ En retard',          tasks: [] },
+    { key: 'today',      label: "Aujourd'hui",          tasks: [] },
+    { key: 'tomorrow',   label: 'Demain',               tasks: [] },
+    { key: 'this_week',  label: 'Cette semaine',        tasks: [] },
+    { key: 'next_week',  label: 'La semaine prochaine', tasks: [] },
+    { key: 'this_month', label: 'Ce mois-ci',           tasks: [] },
+    { key: 'next_month', label: 'Le mois prochain',     tasks: [] },
+    { key: 'later',      label: 'Plus tard',            tasks: [] },
+    { key: 'none',       label: 'Sans échéance',        tasks: [] },
   ];
 
   for (const t of tasks) {
     if (t.status === 'done') continue;
     const ref = getReferenceDate(t, now);
     if (!ref) {
-      groups[6].tasks.push(t);
+      groups[8].tasks.push(t);
       continue;
     }
+
     const diff = daysBetween(now, ref);
-    if (diff < 0) groups[0].tasks.push(t);
-    else if (diff === 0) groups[1].tasks.push(t);
-    else if (diff === 1) groups[2].tasks.push(t);
-    else if (diff <= 7) groups[3].tasks.push(t);
-    else if (diff <= 30) groups[4].tasks.push(t);
-    else groups[5].tasks.push(t);
+
+    if (diff < 0) {
+      groups[0].tasks.push(t);
+    } else if (diff === 0) {
+      groups[1].tasks.push(t);
+    } else if (diff === 1) {
+      groups[2].tasks.push(t);
+    } else if (ref <= weekEnd) {
+      groups[3].tasks.push(t);
+    } else if (ref >= nextWeekStart && ref <= nextWeekEnd) {
+      groups[4].tasks.push(t);
+    } else if (ref <= monthEnd) {
+      groups[5].tasks.push(t);
+    } else if (ref >= nextMonthStart && ref <= nextMonthEnd) {
+      groups[6].tasks.push(t);
+    } else {
+      groups[7].tasks.push(t);
+    }
   }
 
   for (const g of groups) {
@@ -98,73 +156,17 @@ function groupTasks(tasks: Task[]): Group[] {
   return groups.filter((g) => g.tasks.length > 0);
 }
 
-function formatDate(t: Task): string {
-  const start = t.start_at ? new Date(t.start_at) : null;
-  const end = t.end_at ? new Date(t.end_at) : null;
-  const now = new Date();
-
-  if (!start && !end) return '';
-
-  // ============================================================
-  // Cas multi-jours
-  // ============================================================
-  if (start && end) {
-    const diffDays = daysBetween(start, end);
-    if (diffDays > 0) {
-      const startDay = start.toLocaleDateString('fr-FR', {
-        day: 'numeric',
-        month: 'short',
-      });
-      const endDay = end.toLocaleDateString('fr-FR', {
-        day: 'numeric',
-        month: 'short',
-      });
-
-      if (t.all_day) {
-        return `Du ${startDay} au ${endDay}`;
-      }
-      return `Du ${startDay} au ${endDay} → ${formatTime(end)}`;
-    }
-  }
-
-  // ============================================================
-  // Cas même jour
-  // ============================================================
-  const ref = end ?? start;
-  if (!ref) return '';
-
-  const diff = daysBetween(now, ref);
-
-  let dayLabel: string;
-  if (diff === 0) dayLabel = "Aujourd'hui";
-  else if (diff === 1) dayLabel = 'Demain';
-  else if (diff === -1) dayLabel = 'Hier';
-  else if (diff < 0) dayLabel = `Il y a ${Math.abs(diff)} j`;
-  else if (diff < 7) dayLabel = `Dans ${diff} j`;
-  else {
-    dayLabel = ref.toLocaleDateString('fr-FR', {
-      day: 'numeric',
-      month: 'short',
-      year: ref.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
-    });
-  }
-
-  if (t.all_day) return dayLabel;
-
-  if (start && end) {
-    return `${dayLabel}, ${formatTime(start)} → ${formatTime(end)}`;
-  }
-
-  return `${dayLabel}, ${formatTime(ref)}`;
-}
-
 export default function TaskListView({ hiddenListIds }: Props) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<Task | null>(null);
   const [linksOpen, setLinksOpen] = useState(false);
   const [linksTask, setLinksTask] = useState<Task | null>(null);
+
+  const editing = editingId
+    ? tasks.find((t) => t.id === editingId) ?? null
+    : null;
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -201,16 +203,30 @@ export default function TaskListView({ hiddenListIds }: Props) {
 
   const cycleStatus = async (t: Task, e: React.MouseEvent) => {
     e.stopPropagation();
-    await api.setStatus(t.id, nextStatus[t.status]);
+    const next = nextStatus[t.status];
+    setTasks((prev) =>
+      prev.map((x) => (x.id === t.id ? { ...x, status: next } : x))
+    );
+    try {
+      const updated = await api.setStatus(t.id, next);
+      setTasks((prev) =>
+        prev.map((x) => (x.id === updated.id ? updated : x))
+      );
+    } catch (err) {
+      setTasks((prev) =>
+        prev.map((x) => (x.id === t.id ? { ...x, status: t.status } : x))
+      );
+      console.error('setStatus failed:', err);
+    }
   };
 
   const openEdit = (t: Task) => {
-    setEditing(t);
+    setEditingId(t.id);
     setModalOpen(true);
   };
 
   const openCreate = () => {
-    setEditing(null);
+    setEditingId(null);
     setModalOpen(true);
   };
 
@@ -253,6 +269,7 @@ export default function TaskListView({ hiddenListIds }: Props) {
               </div>
               {g.tasks.map((t) => {
                 const count = linkCount(t);
+                const badge = statusBadgeStyle[t.status];
                 return (
                   <div
                     key={t.id}
@@ -267,7 +284,7 @@ export default function TaskListView({ hiddenListIds }: Props) {
                     <div className="task-body">
                       <div className="task-title">{t.title}</div>
                       <div className="task-meta">
-                        {formatDate(t) && <span>{formatDate(t)}</span>}
+                        {formatTaskDate(t) && <span>{formatTaskDate(t)}</span>}
                       </div>
                     </div>
                     <button
@@ -300,8 +317,9 @@ export default function TaskListView({ hiddenListIds }: Props) {
                       <span
                         className="task-status-badge"
                         style={{
-                          color: statusColor[t.status],
-                          borderColor: statusColor[t.status],
+                          backgroundColor: badge.bg,
+                          color: badge.text,
+                          borderColor: badge.border,
                         }}
                         onClick={(e) => cycleStatus(t, e)}
                         title="Changer le statut"
@@ -312,7 +330,7 @@ export default function TaskListView({ hiddenListIds }: Props) {
                         <span className="task-list-tag">
                           <span
                             className="task-list-dot"
-                            style={{ background: t.list_color ?? '#94a3b8' }}
+                            style={{ background: t.list_color ?? '#c4b5fd' }}
                           />
                           {t.list_name}
                         </span>

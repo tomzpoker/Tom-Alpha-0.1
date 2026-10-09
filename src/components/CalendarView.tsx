@@ -4,7 +4,8 @@ import multiMonthPlugin from '@fullcalendar/multimonth';
 import interactionPlugin from '@fullcalendar/interaction';
 import frLocale from '@fullcalendar/core/locales/fr';
 import { useEffect, useRef, useState } from 'react';
-import { api, type TaskStatus } from '../lib/api';
+import { api, type Task, type TaskStatus } from '../lib/api';
+import { formatTaskDate } from '../lib/formatDate';
 import { useZoom } from '../hooks/useZoom';
 
 interface Props {
@@ -13,10 +14,19 @@ interface Props {
 
 type View = 'dayGridMonth' | 'multiMonthQuarter' | 'multiMonthYear';
 
-const statusColor: Record<TaskStatus, string> = {
-  todo: '#3b82f6',
-  in_progress: '#f59e0b',
-  done: '#10b981',
+const statusEventStyle: Record<
+  TaskStatus,
+  { bg: string; border: string; text: string }
+> = {
+  todo:        { bg: '#dbeafe', border: '#93c5fd', text: '#1e40af' },
+  in_progress: { bg: '#fef3c7', border: '#fcd34d', text: '#b45309' },
+  done:        { bg: '#d1fae5', border: '#86efac', text: '#047857' },
+};
+
+const statusLabel: Record<TaskStatus, string> = {
+  todo: 'À faire',
+  in_progress: 'En cours',
+  done: 'Validé',
 };
 
 const nextStatus: Record<TaskStatus, TaskStatus> = {
@@ -31,13 +41,25 @@ function toMidnight(d: Date): Date {
   return x;
 }
 
+interface TooltipState {
+  taskId: string;
+  x: number;
+  y: number;
+}
+
 export default function CalendarView({ hiddenListIds }: Props) {
   const zoom = useZoom();
   const isLargeZoom = zoom >= 130;
 
   const [view, setView] = useState<View>('dayGridMonth');
   const [events, setEvents] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const calendarRef = useRef<FullCalendar>(null);
+
+  const tooltipTask = tooltip
+    ? tasks.find((t) => t.id === tooltip.taskId) ?? null
+    : null;
 
   const load = async () => {
     const now = new Date();
@@ -48,14 +70,12 @@ export default function CalendarView({ hiddenListIds }: Props) {
     const visible = rows.filter(
       (t) => !t.list_id || !hiddenListIds.has(t.list_id)
     );
+    setTasks(visible);
 
     setEvents(
       visible.map((t) => {
-        // ---- Cas tâche "toute la journée" ----
-        // On normalise start/end à minuit, et on ajoute +1 jour à end
-        // car FullCalendar considère end comme EXCLUSIF.
-        // Sans ça, une tâche finissant à 23h59 le 12 oct. débordait
-        // visuellement sur le 13 oct.
+        const colors = statusEventStyle[t.status];
+
         if (t.all_day) {
           const refStart = t.start_at ?? t.end_at;
           const refEnd = t.end_at ?? t.start_at;
@@ -73,17 +93,15 @@ export default function CalendarView({ hiddenListIds }: Props) {
             id: t.id,
             title: t.title,
             start,
-            // Si la tâche ne dure qu'un jour, on n'envoie PAS de end :
-            // FullCalendar affiche alors une barre d'une seule journée.
             end: sameDay ? undefined : end.toISOString(),
             allDay: true,
-            backgroundColor: statusColor[t.status],
-            borderColor: statusColor[t.status],
+            backgroundColor: colors.bg,
+            borderColor: colors.border,
+            textColor: colors.text,
             extendedProps: { status: t.status },
           };
         }
 
-        // ---- Cas tâche horaire ----
         let start = t.start_at ?? t.end_at ?? undefined;
         let end: string | undefined = undefined;
 
@@ -107,8 +125,9 @@ export default function CalendarView({ hiddenListIds }: Props) {
           start,
           end,
           allDay: false,
-          backgroundColor: statusColor[t.status],
-          borderColor: statusColor[t.status],
+          backgroundColor: colors.bg,
+          borderColor: colors.border,
+          textColor: colors.text,
           extendedProps: { status: t.status },
         };
       }).filter(Boolean)
@@ -146,6 +165,63 @@ export default function CalendarView({ hiddenListIds }: Props) {
       window.removeEventListener('resize', forceResize);
     };
   }, [view, hiddenListIds, isLargeZoom]);
+
+  const handleEventMouseEnter = (info: any) => {
+    setTooltip({
+      taskId: info.event.id,
+      x: info.jsEvent.clientX,
+      y: info.jsEvent.clientY,
+    });
+  };
+
+  const handleEventMouseLeave = () => {
+    setTooltip(null);
+  };
+
+  const handleEventClick = async (info: any) => {
+    const taskId = info.event.id;
+    const current = info.event.extendedProps.status as TaskStatus;
+    const next = nextStatus[current];
+
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, status: next } : t))
+    );
+    setEvents((prev) =>
+      prev.map((e) => {
+        if (e.id !== taskId) return e;
+        const c = statusEventStyle[next];
+        return {
+          ...e,
+          backgroundColor: c.bg,
+          borderColor: c.border,
+          textColor: c.text,
+          extendedProps: { ...e.extendedProps, status: next },
+        };
+      })
+    );
+
+    try {
+      await api.setStatus(taskId, next);
+    } catch (err) {
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, status: current } : t))
+      );
+      setEvents((prev) =>
+        prev.map((e) => {
+          if (e.id !== taskId) return e;
+          const c = statusEventStyle[current];
+          return {
+            ...e,
+            backgroundColor: c.bg,
+            borderColor: c.border,
+            textColor: c.text,
+            extendedProps: { ...e.extendedProps, status: current },
+          };
+        })
+      );
+      console.error('setStatus failed:', err);
+    }
+  };
 
   return (
     <div className="calendar-container">
@@ -193,10 +269,9 @@ export default function CalendarView({ hiddenListIds }: Props) {
         displayEventTime={false}
         eventDisplay="block"
         dayMaxEvents={isLargeZoom ? 5 : 3}
-        eventClick={async (info) => {
-          const current = info.event.extendedProps.status as TaskStatus;
-          await api.setStatus(info.event.id, nextStatus[current]);
-        }}
+        eventMouseEnter={handleEventMouseEnter}
+        eventMouseLeave={handleEventMouseLeave}
+        eventClick={handleEventClick}
         eventDrop={async (info) => {
           const d = info.event.start?.toISOString() ?? null;
           await api.update(info.event.id, { start_at: d, end_at: d });
@@ -204,6 +279,97 @@ export default function CalendarView({ hiddenListIds }: Props) {
         headerToolbar={{ left: 'prev,next today', center: 'title', right: '' }}
         height="100%"
       />
+
+      {tooltipTask && tooltip && (
+        <CalendarTooltip task={tooltipTask} x={tooltip.x} y={tooltip.y} />
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+   Tooltip
+   ============================================================ */
+interface TooltipProps {
+  task: Task;
+  x: number;
+  y: number;
+}
+
+function CalendarTooltip({ task, x, y }: TooltipProps) {
+  const colors = statusEventStyle[task.status];
+  const linkCount = Array.isArray(task.links) ? task.links.length : 0;
+  const dateLabel = formatTaskDate(task);
+
+  const TOOLTIP_W = 260;
+  const OFFSET = 14;
+  const MARGIN = 8;
+
+  const viewportW = window.innerWidth;
+  const viewportH = window.innerHeight;
+
+  let left = x + OFFSET;
+  if (left + TOOLTIP_W > viewportW - MARGIN) {
+    left = x - TOOLTIP_W - OFFSET;
+  }
+  if (left < MARGIN) left = MARGIN;
+
+  const estimatedHeight = 140;
+  let top = y + OFFSET;
+  if (top + estimatedHeight > viewportH - MARGIN) {
+    top = y - estimatedHeight - OFFSET;
+  }
+  if (top < MARGIN) top = MARGIN;
+
+  return (
+    <div className="cal-tooltip" style={{ left, top, width: TOOLTIP_W }}>
+      {/* ⭐ Titre à gauche + colonne statut + liste centrée à droite */}
+      <div className="cal-tooltip-header">
+        <span className="cal-tooltip-title">{task.title}</span>
+
+        <div className="cal-tooltip-status-col">
+          <span
+            className="cal-tooltip-badge"
+            style={{
+              backgroundColor: colors.bg,
+              color: colors.text,
+              borderColor: colors.border,
+            }}
+          >
+            {statusLabel[task.status]}
+          </span>
+
+          {task.list_name && (
+            <span className="cal-tooltip-list-inline">
+              <span
+                className="cal-tooltip-list-dot"
+                style={{ background: task.list_color ?? '#cbd5e1' }}
+              />
+              <span className="cal-tooltip-list-name">{task.list_name}</span>
+            </span>
+          )}
+        </div>
+      </div>
+
+      {dateLabel && (
+        <div className="cal-tooltip-row">
+          <span className="cal-tooltip-icon">📅</span>
+          <span>{dateLabel}</span>
+        </div>
+      )}
+
+      {task.description && (
+        <div className="cal-tooltip-desc">{task.description}</div>
+      )}
+
+      {linkCount > 0 && (
+        <div className="cal-tooltip-row cal-tooltip-links">
+          <span className="cal-tooltip-icon">📁</span>
+          <span>
+            {linkCount} document{linkCount > 1 ? 's' : ''}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
